@@ -537,8 +537,8 @@ def train_gnn(model, params):
     def train_step(batch_size):
         # train for random SNRs within a pre-defined interval
         ebno_db = tf.random.uniform([batch_size, 1],
-                                    minval=params["ebno_db_min"],
-                                    maxval=params["ebno_db_max"])
+                                    minval=params["ebno_db_train_min"],
+                                    maxval=params["ebno_db_train_max"])
         with tf.GradientTape() as tape:
             c, llr_hat = model(batch_size, ebno_db)
             loss_value = 0
