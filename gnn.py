@@ -672,14 +672,15 @@ class E2EModel(tf.keras.Model):
         self._k = k
 
         self._binary_source = BinarySource()
-        self._num_bits_per_symbol = 2
-        self._mapper = Mapper("qam", self._num_bits_per_symbol)
-        self._demapper = Demapper("app", "qam", self._num_bits_per_symbol)
+        self._num_bits_per_symbol = 1  # originally 2, should be 1 if using BPSK
+        self._mapper = Mapper("pam", self._num_bits_per_symbol)  # originally "qam"
+        self._demapper = Demapper("app", "pam", self._num_bits_per_symbol)  # originally "qam"
         self._channel = AWGN()
         self._decoder = decoder
         self._encoder = encoder
         self._return_infobits = return_infobits
         self._es_no = es_no
+        self._rng = tf.random.Generator.from_seed(seed=234)
 
     @tf.function(jit_compile=True)
     def call(self, batch_size, ebno_db):
@@ -706,6 +707,12 @@ class E2EModel(tf.keras.Model):
             c_pad = c
         x = self._mapper(c_pad)
 
+        # bursty
+        if len(no.shape) == 0:
+            no = tf.reshape(no, [1,1])
+        no_list = tf.tile(no, [1, x.shape[1]])
+        no_bernoulli = tf.cast(tf.random.categorical(tf.math.log(tf.tile([[0.5, 0.5]], [batch_size, 1])), x.shape[1]), dtype=no.dtype)  # sample [0,1] with probability 0.5 for each bit of each codeword in the batch
+        no = no_list + tf.multiply(no_bernoulli, no)  # compute the original uniform variance plus the bursty variance
         y = self._channel([x, no])
         llr = self._demapper([y, no])
 
