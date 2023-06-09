@@ -707,12 +707,45 @@ class E2EModel(tf.keras.Model):
             c_pad = c
         x = self._mapper(c_pad)
 
-        # bursty
+        # For channels where each bit has different spectral density (variance)
         if len(no.shape) == 0:
             no = tf.reshape(no, [1,1])
         no_list = tf.tile(no, [1, x.shape[1]])
-        no_bernoulli = tf.cast(tf.random.categorical(tf.math.log(tf.tile([[0.5, 0.5]], [batch_size, 1])), x.shape[1]), dtype=no.dtype)  # sample [0,1] with probability 0.5 for each bit of each codeword in the batch
-        no = no_list + tf.multiply(no_bernoulli, no)  # compute the original uniform variance plus the bursty variance
+
+        # # bursty
+        # no_bernoulli = tf.cast(tf.random.categorical(tf.math.log(tf.tile([[0.5, 0.5]], [batch_size, 1])), x.shape[1]), dtype=no.dtype)  # sample [0,1] with probability 0.5 for each bit of each codeword in the batch
+        # no = no_list + tf.multiply(no_bernoulli, no)  # compute the original uniform variance plus the bursty variance
+
+        # burst
+        Q = 0.8
+        q = 0.5
+        # no_burst = np.zeros((no_list.shape[0], no_list.shape[1]))
+        # for i in range(no_burst.shape[0]):
+        #     current_state = 0
+        #     for j in range(no_burst.shape[1]):
+        #         if current_state == 0:
+        #             if not np.random.binomial(1, Q):
+        #                 current_state = 1
+        #         else:
+        #             no_burst[i, j] = 1
+        #             if not np.random.binomial(1, q):
+        #                 current_state = 0
+        # no_burst = tf.convert_to_tensor(no_burst, dtype=no.dtype)
+        no_burst = tf.zeros_like(no_list, dtype=no.dtype)
+        for i in range(len(no_burst)):  # FIXME
+            current_state = 0
+            for j in range(no_burst.shape[1]):
+                if current_state == 0:
+                    if not np.random.binomial(1, Q):
+                        current_state = 1
+                else:
+                    sets = tf.constant([[i, j]])
+                    no_burst = tf.tensor_scatter_nd_update(no_burst, tf.expand_dims(sets, 1), tf.constant([[1.]]))
+                    if not np.random.binomial(1, q):
+                        current_state = 0
+
+        no = no_list + tf.multiply(no_burst, no)
+
         y = self._channel([x, no])
         llr = self._demapper([y, no])
 
